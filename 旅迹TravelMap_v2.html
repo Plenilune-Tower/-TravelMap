@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>旅迹 TravelMap · 给 AI 立规矩</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --red:#FF2442;--ink:#1F1B16;--sub:#8A8378;--faint:#B7B0A4;
+  --line:#ECE7DF;--bg:#FBF9F6;--card:#FFFFFF;
+  --green:#16A34A;--amber:#D97706;--bad:#DC2626;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;background:var(--bg);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;color:var(--ink)}
+.app{border:1px solid var(--line);border-radius:16px;overflow:hidden;width:100%;max-width:980px;background:var(--card);box-shadow:0 8px 40px rgba(31,27,22,.07)}
+.hdr{display:flex;align-items:center;gap:12px;padding:13px 20px;border-bottom:1px solid var(--line)}
+.logo{font-size:16px;font-weight:600;letter-spacing:-.3px;color:var(--red)}
+.logo em{color:var(--ink);font-style:normal;font-weight:500}
+.tagline{font-size:11.5px;color:var(--sub)}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.mode{font-size:10.5px;padding:4px 9px;border-radius:99px;background:#F4F1EC;color:var(--sub);border:1px solid var(--line)}
+.mode.live{background:#EBFAF0;color:var(--green);border-color:#bbe8cb}
+.info-btn{width:24px;height:24px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--sub);font-size:12px;cursor:pointer;line-height:1}
+.info-btn:hover{color:var(--ink)}
+.body{display:flex;height:600px}
+/* ---------- map ---------- */
+.map-wrap{flex:1;position:relative;overflow:hidden;background:#F7F4EF}
+.map-grid{position:absolute;inset:0;background-image:radial-gradient(#D9D3C8 1px,transparent 1px);background-size:24px 24px}
+.region-label{position:absolute;font-size:9px;color:#C6BFB2;font-weight:600;letter-spacing:2px;text-transform:uppercase;user-select:none;pointer-events:none}
+.map-note{position:absolute;left:14px;bottom:12px;font-size:10px;color:var(--faint)}
+.map-hint{position:absolute;top:16px;left:16px;font-size:11.5px;color:var(--sub);background:#fff;border:1px solid var(--line);padding:6px 11px;border-radius:99px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.pin{position:absolute;transform:translate(-50%,-50%);cursor:pointer;text-align:center;transition:opacity .2s}
+.pin-bubble{width:46px;height:46px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;border:2.5px solid #fff;box-shadow:0 3px 10px rgba(255,36,66,.28);transition:transform .15s,background .15s;margin:0 auto}
+.pin:hover .pin-bubble{transform:scale(1.12)}
+.pin.sel .pin-bubble{background:var(--ink);box-shadow:0 3px 10px rgba(31,27,22,.3)}
+.pin-count{font-size:10.5px;font-weight:600;line-height:1}
+.pin-unit{font-size:7.5px;opacity:.85;margin-top:1px}
+.pin-name{font-size:11.5px;color:var(--sub);margin-top:4px;white-space:nowrap;font-weight:500}
+.pin.sel .pin-name{color:var(--ink);font-weight:600}
+/* ---------- panel ---------- */
+.panel{width:412px;border-left:1px solid var(--line);background:var(--card);display:flex;flex-direction:column;overflow:hidden}
+.p-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:28px;text-align:center;gap:9px}
+.p-empty-icon{font-size:30px}
+.p-empty-title{font-size:14.5px;font-weight:600}
+.p-empty-sub{font-size:12px;color:var(--sub);line-height:1.7}
+.p-content{display:none;flex-direction:column;height:100%;overflow:hidden}
+.p-hdr{padding:12px 16px 10px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.p-title{font-size:16px;font-weight:600}
+.p-sub{font-size:11px;color:var(--sub);margin-top:2px}
+.back{font-size:11px;color:var(--sub);cursor:pointer;background:none;border:1px solid var(--line);padding:4px 11px;border-radius:99px;font-family:inherit}
+.back:hover{background:#F4F1EC}
+.tabs{display:flex;gap:4px;padding:9px 14px;border-bottom:1px solid var(--line);flex-shrink:0}
+.tab{flex:1;font-size:12px;padding:6px 0;text-align:center;border-radius:8px;cursor:pointer;color:var(--sub);font-weight:500;border:1px solid transparent;font-family:inherit;background:none}
+.tab:hover{background:#F7F4EF}
+.tab.on{background:#FFF3F5;color:var(--red);border-color:#FFD6DD;font-weight:600}
+.scroll{flex:1;overflow-y:auto;padding:13px 14px}
+/* posts */
+.src-toggle{font-size:11.5px;color:var(--sub);cursor:pointer;display:flex;align-items:center;gap:6px;margin-bottom:10px;user-select:none}
+.src-toggle b{color:var(--ink);font-weight:600}
+.dotrow{display:flex;gap:3px}
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.d-fresh{background:var(--green)}.d-aging{background:var(--amber)}.d-stale{background:var(--bad)}
+.posts{display:none;margin-bottom:10px}
+.posts.open{display:block}
+.post{border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:7px;background:#fff}
+.post-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.post-author{font-size:12px;font-weight:600}
+.post-date{font-size:10px;color:var(--sub);display:flex;align-items:center;gap:4px}
+.post-body{font-size:12px;color:var(--ink);line-height:1.6}
+.post-tags{margin-top:5px;display:flex;gap:4px;flex-wrap:wrap}
+.tag{font-size:9px;padding:2px 6px;border-radius:99px;background:#F0F4FB;color:#3b6bbf}
+/* comparison */
+.cmp-card{border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:9px;background:#fff}
+.cmp-card.b{border-color:#FFD6DD;background:#FFFBFB}
+.cmp-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.cmp-label{font-size:10.5px;font-weight:700;letter-spacing:.3px;color:var(--sub)}
+.cmp-card.b .cmp-label{color:var(--red)}
+.cmp-badge{font-size:9.5px;color:var(--faint)}
+.cmp-badge.live{color:var(--green);font-weight:600}
+.cmp-body{font-size:12.5px;line-height:1.75}
+.regen{font-size:10.5px;color:var(--red);background:none;border:none;cursor:pointer;font-family:inherit;padding:0}
+.regen:hover{text-decoration:underline}
+.vote{border:1px dashed var(--line);border-radius:12px;padding:10px 13px;margin-top:2px}
+.vote-q{font-size:12px;font-weight:600;margin-bottom:8px}
+.vote-row{display:flex;gap:7px}
+.vote-btn{flex:1;font-size:11.5px;padding:7px 0;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:inherit;color:var(--ink)}
+.vote-btn:hover{border-color:var(--red);color:var(--red)}
+.vote-btn.picked{background:var(--red);border-color:var(--red);color:#fff}
+.vote-done{font-size:11px;color:var(--sub);margin-top:8px;line-height:1.6;display:none}
+/* spec tab */
+.seg{display:flex;gap:5px;margin-bottom:11px}
+.seg-btn{flex:1;font-size:11.5px;padding:6px 0;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:inherit;color:var(--sub);font-weight:500}
+.seg-btn.on{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:600}
+.spec-doc{border:1px solid var(--line);border-radius:12px;background:#fff;padding:13px 15px;margin-bottom:9px}
+.spec-title{font-size:12.5px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.spec-vtag{font-size:9.5px;padding:2px 7px;border-radius:99px;background:#FFF3F5;color:var(--red);font-weight:600}
+.spec-body{font-size:12px;line-height:1.85;white-space:pre-wrap}
+.spec-note{border-left:3px solid #E8C7A8;background:#FBF6EF;border-radius:0 10px 10px 0;padding:9px 12px;font-size:11.5px;color:#7A6448;line-height:1.7}
+.spec-edit{width:100%;min-height:170px;font-size:12px;line-height:1.8;font-family:inherit;border:1px solid var(--line);border-radius:12px;padding:12px;resize:vertical;outline:none;margin-bottom:8px}
+.spec-edit:focus{border-color:var(--red)}
+.gen-btn{width:100%;font-size:12px;padding:9px 0;border-radius:9px;border:none;background:var(--red);color:#fff;cursor:pointer;font-family:inherit;font-weight:600}
+.gen-btn:disabled{opacity:.5;cursor:not-allowed}
+/* eval tab */
+.eval-table{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:10px}
+.ev-row{display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);gap:8px}
+.ev-row:last-child{border-bottom:none}
+.ev-row.head{background:#F7F4EF;font-size:10px;color:var(--sub);font-weight:600}
+.ev-dim{width:96px;font-size:11px;font-weight:600;flex-shrink:0}
+.ev-cell{flex:1;display:flex;align-items:center;gap:5px}
+.ev-bar{flex:1;height:5px;border-radius:99px;background:#F0EBE3;overflow:hidden}
+.ev-fill{height:100%;border-radius:99px;background:#D9D3C8}
+.ev-cell.hot .ev-fill{background:var(--red)}
+.ev-num{font-size:10px;color:var(--sub);width:10px;text-align:right}
+.ev-cell.hot .ev-num{color:var(--red);font-weight:700}
+.judge{border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:9px;background:#fff}
+.judge-title{font-size:11px;font-weight:700;color:var(--sub);margin-bottom:7px;letter-spacing:.3px}
+.judge-line{font-size:11.5px;line-height:1.7;margin-bottom:6px;display:flex;gap:7px}
+.judge-line:last-child{margin-bottom:0}
+.jv{flex-shrink:0;font-weight:700;font-size:10px;padding:1px 6px;border-radius:99px;background:#F4F1EC;color:var(--sub);height:fit-content;margin-top:2px}
+.judge-line.hot .jv{background:#FFF3F5;color:var(--red)}
+.method{font-size:10.5px;color:var(--sub);line-height:1.75;padding:0 2px}
+/* chat */
+.chat{border-top:1px solid var(--line);padding:10px 13px;flex-shrink:0;background:#fff}
+.chat-msgs{max-height:96px;overflow-y:auto;margin-bottom:8px}
+.cmsg{font-size:11.5px;margin-bottom:5px;line-height:1.6;color:var(--sub)}
+.cmsg.u{color:var(--ink)}
+.cmsg .ex{font-size:9px;color:var(--faint);border:1px solid var(--line);border-radius:99px;padding:1px 5px;margin-right:4px}
+.chat-row{display:flex;gap:7px}
+.chat-input{flex:1;font-size:12px;padding:8px 11px;border:1px solid var(--line);border-radius:9px;font-family:inherit;outline:none}
+.chat-input:focus{border-color:var(--red)}
+.chat-send{padding:8px 13px;background:var(--red);color:#fff;border:none;border-radius:9px;font-size:11.5px;cursor:pointer;white-space:nowrap;font-family:inherit;font-weight:600}
+.chat-send:disabled{opacity:.45;cursor:not-allowed}
+/* toast & modal */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:12px;padding:10px 16px;border-radius:10px;opacity:0;pointer-events:none;transition:all .25s;max-width:420px;line-height:1.6;text-align:center;z-index:60}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.modal-bg{position:fixed;inset:0;background:rgba(31,27,22,.4);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+.modal-bg.show{display:flex}
+.modal{background:#fff;border-radius:16px;max-width:460px;width:100%;padding:22px 24px;max-height:80vh;overflow-y:auto}
+.modal h3{font-size:15px;margin-bottom:12px}
+.modal p{font-size:12.5px;line-height:1.8;color:var(--ink);margin-bottom:10px}
+.modal p b{font-weight:600}
+.modal .sig{font-size:11.5px;color:var(--sub);margin-top:4px}
+.modal-close{margin-top:6px;width:100%;font-size:12px;padding:9px 0;border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;font-family:inherit}
+.modal-close:hover{background:#F7F4EF}
+@media (max-width:760px){.body{flex-direction:column;height:auto}.map-wrap{height:300px}.panel{width:100%;border-left:none;border-top:1px solid var(--line);height:560px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="hdr">
+    <div class="logo">旅迹<em> TravelMap</em></div>
+    <div class="tagline">给 AI 立规矩 · 旅行摘要「理想态」工作台</div>
+    <div class="hdr-right">
+      <div class="mode" id="modeBadge">演示模式 · 预生成数据</div>
+      <button class="info-btn" onclick="document.getElementById('infoModal').classList.add('show')">i</button>
+    </div>
+  </div>
+  <div class="body">
+    <div class="map-wrap" id="mapWrap">
+      <div class="map-grid"></div>
+      <div class="region-label" style="top:14%;left:26%">Europe</div>
+      <div class="region-label" style="top:14%;left:68%">East Asia</div>
+      <div class="region-label" style="top:48%;left:56%">Southeast Asia</div>
+      <div class="map-hint" id="mapHint">点击目的地，看 AI 摘要在不同标准下如何变化 →</div>
+      <div class="map-note">示意地图 · 正式设想接入高德／Apple Maps</div>
+    </div>
+    <div class="panel">
+      <div class="p-empty" id="pEmpty">
+        <div class="p-empty-icon">🧭</div>
+        <div class="p-empty-title">同样的帖子，不同的 AI</div>
+        <div class="p-empty-sub">点击地图上的目的地，对比「无标准」与「理想态标准」<br>下的 AI 摘要——并查看标准三轮迭代的过程与评分</div>
+      </div>
+      <div class="p-content" id="pContent">
+        <div class="p-hdr">
+          <div>
+            <div class="p-title" id="pTitle"></div>
+            <div class="p-sub" id="pSub"></div>
+          </div>
+          <button class="back" onclick="clearSel()">← 返回</button>
+        </div>
+        <div class="tabs">
+          <button class="tab on" id="tab0" onclick="switchTab(0)">摘要对比</button>
+          <button class="tab" id="tab1" onclick="switchTab(1)">理想态标准</button>
+          <button class="tab" id="tab2" onclick="switchTab(2)">自动评估</button>
+        </div>
+        <div class="scroll" id="scrollArea"></div>
+        <div class="chat">
+          <div class="chat-msgs" id="chatMsgs"></div>
+          <div class="chat-row">
+            <input class="chat-input" id="chatInput" placeholder="基于这些帖子提问（实时调用 Claude）…" onkeydown="if(event.key==='Enter')sendChat()"/>
+            <button class="chat-send" id="sendBtn" onclick="sendChat()">发送</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-bg" id="infoModal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal">
+    <h3>关于本演示</h3>
+    <p><b>这是什么：</b>小红书「AI人文训练实习生」岗位的应聘作品。它尝试回答一个问题——当 AI 替用户读帖子、做转述时，什么才算「好的转述」？答案不是一段更聪明的代码，而是一份被反复打磨的<b>标准</b>。本 demo 把这份标准做成了产品里可见、可切换、可评估的部分。</p>
+    <p><b>演示模式：</b>境内网络无法直连 Claude API，因此默认展示预生成的真实 AI 输出与评分，保证完整可体验。在可访问 Claude API 的环境下，「实时生成」「自定义标准」与底部问答均可真实调用模型。</p>
+    <p><b>数据说明：</b>帖子为构造的示例数据；地图为示意（正式设想接入高德／Apple Maps，并支持「个人旅迹」视角）。</p>
+    <p class="sig">作者：汪义朗 · UCL 科学社会学与政治学 · 用 Claude Code 构建</p>
+    <button class="modal-close" onclick="document.getElementById('infoModal').classList.remove('show')">关闭</button>
+  </div>
+</div>
+
+<script>
+/* ================= 数据 ================= */
+const SPECS = {
+  v1:{name:'v0.1 直觉版',tag:'起点',
+    text:'请阅读以下关于{城市}的小红书帖子，写一段友好自然的旅行总结，帮助用户快速了解这个目的地的最新情况。',
+    note:'这是大多数人写 Prompt 的起点。问题不在「友好」，在于没有定义什么是「好」——于是 AI 自行决定：信息被平均化、没有时间感、过时与新鲜混为一谈。'},
+  v2:{name:'v0.2 规则版',tag:'+硬规则',
+    text:'在 v0.1 基础上新增：\n1. 仅将 30 天内帖子视为「现状」；更旧信息必须标注发帖时间，或舍弃\n2. 价格、开放状态、排队时长等易变信息，必须附时间标注\n3. 安全相关信息无条件前置\n4. 全文 ≤ 110 字；每句至少含一个可执行细节（时间／价格／地点／做法）',
+    note:'把「时效性」从感觉变成了规则，可执行密度有了硬指标。代价：输出像情报简报，失去了社区的「人味」。'},
+  v3:{name:'v0.3 语感版',tag:'+人文判断',
+    text:'在 v0.2 基础上新增：\n5. 语气基准＝「懂行的朋友」：给判断、说人话。负面清单：禁用「天花板／绝绝子／yyds／治愈系／一网打尽」等营销腔与堆砌的感叹号\n6. 帖子间信息冲突时，并列呈现并各自标注时间；不得替用户「抹平」分歧\n7. 超过 6 个月的信息降级使用：标注「仅供参考／建议核实」，而非沉默删除\n8. 可以给倾向，但必须带依据与适用条件（「值得排队」→「工作日下午人最少时值得」）\n9. 安全信息前置但不放大：给出频次与量级（如「1 个月内 1 篇提及」），呈现基率而非渲染氛围',
+    note:'语气用「负面清单」定义，比正面形容更可执行；第 6、7、9 条是把认识论的诚实写进标准——不确定性要呈现、旧信息要降级、小概率风险要给基率而非渲染。这一版人文判断密度最高。'}
+};
+const DIMS = ['时效处理','可执行密度','冲突与不确定','关键信息前置','语气与社区感'];
+
+const D = {
+  '东京':{pos:{t:'30%',l:'76%'},count:234,posts:[
+    {a:'糖糖爱旅行',c:'新宿御苑樱花目前开了约80%，早8点开门，9点前到能完美避开人流，门票500日元，强烈推荐！',d:'3天前',f:'fresh',tags:['樱花季','公园']},
+    {a:'東京探店日记',c:'涩谷新开抹茶甜品店排队约1小时，工作日下午3点人最少，味道完全值得等待',d:'1周前',f:'fresh',tags:['美食','涩谷']},
+    {a:'日本穷游er',c:'JR Pass今年又涨价了，建议提前在国内官网购买，能省下约800日元手续费',d:'3个月前',f:'aging',tags:['交通','省钱']},
+    {a:'Yuki旅行记',c:'去年雨季几乎每天下雨，建议多准备室内备选方案，推荐teamLab汐留店',d:'10个月前',f:'stale',tags:['气候','攻略']}],
+   baseline:'东京是一座传统与现代交融的魅力都市！这里有浪漫的樱花、超火的甜品店和便捷的交通，无论赏樱、探店还是逛展都能收获满满。记得提前规划行程，开启一段难忘的旅程吧！',
+   ideal:{
+    v1:'东京现在樱花开得正好，新宿御苑很值得去！涩谷有家超火的抹茶店，排队但值得。JR Pass 建议提前买更划算。雨季的话可以去 teamLab，室内也很好玩哦。',
+    v2:'新宿御苑樱花约八成开（3天前），早8点开门、9点前入园可避开人流，门票500日元。涩谷新抹茶店排队约1小时，工作日下午3点最短（1周前）。JR Pass 已涨价，建议国内官网提前购买（3个月前信息）。',
+    v3:'樱花是现在去的最大理由：新宿御苑约八成开（3天前帖），9点前到基本独享，门票500日元。涩谷那家新抹茶店，发帖人觉得排1小时值——想省时间就工作日下午3点去（1周前）。JR Pass 今年涨价，国内官网先买能省约800日元（3个月前信息，下单前再核实）。雨季备选 teamLab 来自10个月前的帖子，仅供参考。'},
+   scores:{base:[1,1,1,1,2],v1:[2,3,1,2,4],v2:[5,5,3,4,2],v3:[5,5,5,4,5]},
+   judges:{base:'零可执行信息；用「难忘」「魅力」替代事实；无任何时间标注。',
+    v1:'信息出现了，但「开得正好」来自3天前的帖却未标注；10个月前的雨季信息被当作现状混入。',
+    v2:'时效与密度达标，但读起来像情报简报；旧信息被直接丢弃，「降级使用」未体现。',
+    v3:'时间感、判断与温度兼得；旧信息降级为「仅供参考」而非删除；引用发帖人观点而非替用户下结论。'},
+   exq:'四月底去还能赶上樱花吗？',
+   exa:'悬。3天前的帖子说新宿御苑已开八成，按这个进度四月底大概率进入尾声——能不能赶上晚樱要看天气。建议出发前一周再搜最新帖确认花况，别按往年时间表推算。'},
+
+  '京都':{pos:{t:'33%',l:'72%'},count:189,posts:[
+    {a:'日本生活记录',c:'伏见稻荷周末人山人海，工作日早晨6点前到非常安静美丽，完全不一样的体验',d:'6天前',f:'fresh',tags:['神社','避人']},
+    {a:'和风体验者',c:'岚山竹林早上8点前几乎没人，人力车大叔很友善，会帮你拍很美的照片',d:'3周前',f:'fresh',tags:['竹林','岚山']},
+    {a:'古都漫步者',c:'祇园和服出租要提前2周预约，3000-8000日元不等，推荐梦京都这家质量好',d:'7个月前',f:'stale',tags:['和服','祇园']}],
+   baseline:'京都，一座让人一秒穿越回古代日本的城市！千年神社、静谧竹林与典雅和服体验，每一帧都是大片。快来感受这份独属于古都的浪漫吧！',
+   ideal:{
+    v1:'伏见稻荷和岚山竹林都超美，建议早起去人少。想体验和服的话祇园有很多店，记得提前预约，穿上拍照超出片！',
+    v2:'伏见稻荷周末人多，工作日早6点前到几乎无人（6天前）。岚山竹林早8点前人最少（3周前）。和服租赁需提前约2周预约，价格3000–8000日元（7个月前信息）。',
+    v3:'京都的诀窍是一个「早」字：伏见稻荷工作日6点前几乎无人（6天前帖），岚山竹林8点前同理，还有人力车大叔帮拍照（3周前）。和服要穿得提前2周约、3000–8000日元——这是7个月前的价位，旺季可能上浮，预约前先确认。'},
+   scores:{base:[1,1,1,1,2],v1:[2,2,1,2,4],v2:[5,4,3,4,2],v3:[5,5,5,4,5]},
+   judges:{base:'「每一帧都是大片」是标准里负面清单要拦的营销腔；没有一条可直接执行的信息。',
+    v1:'「提前预约」有用但没说提前多久；全部时间信息缺失。',
+    v2:'规则全部达标，但三句话像三条数据库记录，没有取舍与主线。',
+    v3:'提炼出「早」这条主线——这是编辑判断，不是检索；对7个月前的价格做了不确定性处理。'},
+   exq:'只有一个早上，伏见稻荷和岚山选哪个？',
+   exa:'按帖子信息：两处都靠「早」取胜，但伏见稻荷要6点前到、岚山8点前即可。如果你起得来，6点先去伏见稻荷，9点前转场岚山理论上来得及，但会很赶。只选一个的话，看你想要千本鸟居还是竹林——人少程度近期帖都给了背书。'},
+
+  '巴黎':{pos:{t:'24%',l:'31%'},count:445,posts:[
+    {a:'法国留学生',c:'埃菲尔铁塔必须网上提前订票，现场几乎买不到。夜晚整点灯光秀只有5分钟，别错过！',d:'1周前',f:'fresh',tags:['地标','必去']},
+    {a:'美食探险队',c:'Marais区法棍店周日很多关门，建议周六扫街，Boulangerie Utopie超推荐',d:'2周前',f:'fresh',tags:['美食','玛黑区']},
+    {a:'Paris行走指南',c:'扒手问题！地铁13号线和景点附近高发，背包放前面，护照不要带出门',d:'3个月前',f:'aging',tags:['安全提示','地铁']},
+    {a:'欧洲穷游2023',c:'去年奥运会期间所有东西贵了一倍，餐厅全满，那段时间真的不建议去',d:'1年前',f:'stale',tags:['2024奥运']}],
+   baseline:'巴黎，永远的浪漫之都！铁塔、美食与艺术气息让人流连忘返。带上相机，去邂逅属于你的法式浪漫吧！',
+   ideal:{
+    v1:'埃菲尔铁塔一定要提前网上买票，晚上的灯光秀超美别错过！玛黑区有很多好吃的法棍店。地铁上注意小偷，护照最好别带出门。',
+    v2:'地铁13号线及景点周边扒手高发，背包前背、护照留住处（3个月前）。铁塔门票需网上预订，现场几乎无票；整点灯光秀仅5分钟（1周前）。玛黑区法棍店周日多关门，建议周六去（2周前）。',
+    v3:'先说安全：13号线和热门景点扒手相对高发（3个月前帖，1篇提及）——属常规防范量级，背包前背、护照留住处即可，不必紧张。铁塔票务卡得很死：只能网上提前订，整点灯光秀仅5分钟，掐好时间（1周前）。法棍有个时间窍门：玛黑区周日多歇业，周六去，Boulangerie Utopie 被点名推荐（2周前）。去年奥运期间的物价帖已过时，可忽略。'},
+   scores:{base:[1,1,1,1,2],v1:[2,3,1,3,4],v2:[5,5,3,4,2],v3:[5,5,5,5,5]},
+   judges:{base:'全部是氛围词；安全信息完全缺失。',
+    v1:'安全提示出现了，但位置靠后、无细节——哪条线？什么量级？',
+    v2:'安全前置达标；但「扒手高发」没有频次语境，容易放大焦虑。',
+    v3:'安全信息前置且给出频次与量级（1篇提及／常规防范），不渲染氛围；过时信息被点名排除而非沉默丢弃。'},
+   exq:'巴黎治安到底怎么样，一个人去安全吗？',
+   exa:'帖子里关于安全的只有1篇（3个月前），指向扒手而非人身风险，集中在13号线和景点周边。这是欧洲大城市的常规水平：财物前置防范即可。注意：搜「治安」会被同类帖刷屏放大焦虑——以频次为准，而不是以情绪浓度为准。'},
+
+  '巴厘岛':{pos:{t:'64%',l:'69%'},count:312,posts:[
+    {a:'岛屿漂流者',c:'库塔现在淡季人很少，日落超美！冲浪板可砍价到100k印尼盾，别开口就付',d:'5天前',f:'fresh',tags:['海滩','冲浪']},
+    {a:'素食旅行家',c:'Ubud新开了很多素食餐厅，价格比两年前贵约30%，google maps搜ubud vegan都很好',d:'2周前',f:'fresh',tags:['美食','乌布']},
+    {a:'背包客阿杰',c:'注意！近期库塔某些区域扒手增多，不建议戴贵重首饰上街，晚上结伴出行',d:'1个月前',f:'fresh',tags:['安全提示']},
+    {a:'摄影师Karen',c:'田园风景拍摄地大部分开始收费，泰格拉朗梯田入场100k印尼盾，但还是很值',d:'8个月前',f:'stale',tags:['摄影','景点']}],
+   baseline:'巴厘岛，治愈系海岛天花板！冲浪、日落、田园与美食一网打尽，随手一拍就是 ins 风大片。这个假期，就去巴厘岛充电吧！',
+   ideal:{
+    v1:'库塔的日落超美，现在淡季人少正合适！乌布有很多素食餐厅可以打卡。海边注意保管好财物，梯田拍照可能要收费哦。',
+    v2:'库塔近期有扒手增多提示，贵重首饰勿外戴、夜间结伴（1个月前）。现为淡季，人少，冲浪板可砍价至100k印尼盾（5天前）。乌布素食选择多但较两年前涨约30%（2周前）。泰格拉朗梯田入场100k印尼盾（8个月前信息）。',
+    v3:'安全先说：1个月前有帖提醒库塔扒手增多——单帖提及，常规防范即可（首饰别戴、晚上结伴），不影响行程。眼下是淡季红利期：人少、日落好，冲浪板别按开价付，能砍到100k（5天前）。乌布素食确实多了，但比两年前贵约30%，预算往上留一点（2周前）。梯田收费100k是8个月前的数字，去之前搜最新帖确认。'},
+   scores:{base:[1,1,1,1,2],v1:[2,2,1,2,4],v2:[5,5,3,5,2],v3:[5,5,5,5,5]},
+   judges:{base:'「天花板」「一网打尽」「治愈系」正是语气负面清单要拦的词。',
+    v1:'安全信息被弱化成一句客套；所有价格无时间。',
+    v2:'安全前置且具体；但通篇无判断——「涨30%」之后用户该怎么办，没有说。',
+    v3:'安全信息给了量级判断（单帖／常规防范）；「预算往上留一点」是把信息翻译成了决策。'},
+   exq:'现在去巴厘岛要担心安全问题吗？',
+   exa:'目前帖子里的安全提示只有1篇（1个月前），指向库塔的扒手、而非更严重的风险。量级上属于「常规防范」：贵重物品别外露、晚上结伴。单篇提醒不等于趋势——如果担心，出发前再搜一次近30天的帖子看有没有新增同类信息。'}
+};
+
+/* ================= 状态 ================= */
+let sel=null, specV='v3', curTab=0, hist=[], liveSummary=null, votes={};
+
+/* ================= 工具 ================= */
+function $(id){return document.getElementById(id)}
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),3600)}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function freshDot(f){return f==='fresh'?'d-fresh':f==='aging'?'d-aging':'d-stale'}
+
+/* ================= 地图 ================= */
+function renderPins(){
+  const wrap=$('mapWrap');
+  Object.entries(D).forEach(([name,data])=>{
+    const el=document.createElement('div');
+    el.className='pin';el.id='p_'+name;
+    el.style.top=data.pos.t;el.style.left=data.pos.l;
+    el.innerHTML='<div class="pin-bubble"><div class="pin-count">'+data.count+'</div><div class="pin-unit">篇</div></div><div class="pin-name">'+name+'</div>';
+    el.onclick=()=>selectDest(name);
+    wrap.appendChild(el);
+  });
+}
+
+function selectDest(name){
+  sel=name;hist=[];liveSummary=null;curTab=0;
+  document.querySelectorAll('.pin').forEach(p=>p.classList.remove('sel'));
+  $('p_'+name).classList.add('sel');
+  $('mapHint').style.display='none';
+  $('pEmpty').style.display='none';
+  $('pContent').style.display='flex';
+  const data=D[name];
+  $('pTitle').textContent=name;
+  const freshN=data.posts.filter(p=>p.f==='fresh').length;
+  $('pSub').textContent=data.count+' 篇帖子 · 示例取样 '+data.posts.length+' 篇（'+freshN+' 篇近期）';
+  renderChatSeed();
+  switchTab(0);
+}
+
+function clearSel(){
+  sel=null;
+  document.querySelectorAll('.pin').forEach(p=>p.classList.remove('sel'));
+  $('pEmpty').style.display='flex';
+  $('pContent').style.display='none';
+  $('mapHint').style.display='block';
+}
+
+/* ================= Tabs ================= */
+function switchTab(i){
+  curTab=i;
+  [0,1,2].forEach(n=>$('tab'+n).classList.toggle('on',n===i));
+  if(i===0)renderCompare();else if(i===1)renderSpec();else renderEval();
+}
+
+/* ---------- Tab 0 摘要对比 ---------- */
+function renderCompare(){
+  const d=D[sel];
+  const idealTxt = liveSummary ? liveSummary : d.ideal[specV];
+  const liveBadge = liveSummary ? '<span class="cmp-badge live">● Live 实时生成</span>' : '<span class="cmp-badge">预生成</span>';
+  const vkey=sel+'_'+specV;
+  const picked=votes[vkey];
+  let html='';
+  html+='<div class="src-toggle" onclick="togglePosts()"><b>数据源</b> '+d.posts.length+' 篇帖子 <span class="dotrow">'+d.posts.map(p=>'<span class="dot '+freshDot(p.f)+'"></span>').join('')+'</span> <span id="srcArrow">▸ 展开</span></div>';
+  html+='<div class="posts" id="postsBox">'+d.posts.map(p=>'<div class="post"><div class="post-hdr"><span class="post-author">'+p.a+'</span><span class="post-date"><span class="dot '+freshDot(p.f)+'"></span>'+p.d+'</span></div><div class="post-body">'+p.c+'</div><div class="post-tags">'+p.tags.map(t=>'<span class="tag">#'+t+'</span>').join('')+'</div></div>').join('')+'</div>';
+  html+='<div class="cmp-card"><div class="cmp-hdr"><span class="cmp-label">A · 基线摘要（无标准）</span><span class="cmp-badge">预生成</span></div><div class="cmp-body">'+esc(d.baseline)+'</div></div>';
+  html+='<div class="cmp-card b"><div class="cmp-hdr"><span class="cmp-label">B · 理想态摘要 · 标准 '+SPECS[specV].name.split(' ')[0]+'</span>'+liveBadge+'</div><div class="cmp-body">'+esc(idealTxt)+'</div><div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center"><button class="regen" onclick="switchTab(1)">⚙ 查看／切换标准</button><button class="regen" onclick="liveGen()">⚡ 实时重新生成</button></div></div>';
+  html+='<div class="vote"><div class="vote-q">两两对比：哪个摘要更好？</div><div class="vote-row">'+
+    ['A 更好','B 更好','差不多'].map((lb,i)=>'<button class="vote-btn'+(picked===i?' picked':'')+'" onclick="vote('+i+')">'+lb+'</button>').join('')+
+    '</div><div class="vote-done" id="voteDone" style="display:'+(picked!==undefined?'block':'none')+'">已记录（仅本次会话）。这一票就是模型评估里的「两两对比」偏好信号——切换到「自动评估」页，看模型按五个维度怎么打。</div></div>';
+  $('scrollArea').innerHTML=html;
+}
+function togglePosts(){
+  const b=$('postsBox');b.classList.toggle('open');
+  $('srcArrow').textContent=b.classList.contains('open')?'▾ 收起':'▸ 展开';
+}
+function vote(i){
+  votes[sel+'_'+specV]=i;
+  renderCompare();
+}
+
+/* ---------- Tab 1 理想态标准 ---------- */
+function renderSpec(){
+  let html='<div class="seg">'+['v1','v2','v3','custom'].map(v=>{
+    const lb=v==='custom'?'自定义':SPECS[v].name.split(' ')[0];
+    return '<button class="seg-btn'+(specV===v?' on':'')+'" onclick="setSpec(\''+v+'\')">'+lb+'</button>';
+  }).join('')+'</div>';
+  if(specV==='custom'){
+    html+='<textarea class="spec-edit" id="specEdit">'+esc(SPECS.v3.text)+'</textarea>';
+    html+='<button class="gen-btn" onclick="liveGen()">⚡ 用此标准实时生成摘要（需可访问 Claude API）</button>';
+    html+='<div class="spec-note" style="margin-top:9px">自定义标准没有预生成结果，需要实时调用。这正是真实工作流：改一版标准 → 生成 → 看哪里不对 → 再改。</div>';
+  }else{
+    const s=SPECS[specV];
+    html+='<div class="spec-doc"><div class="spec-title">'+s.name+'<span class="spec-vtag">'+s.tag+'</span></div><div class="spec-body">'+esc(s.text)+'</div></div>';
+    html+='<div class="spec-note"><b>这一版改了什么：</b>'+s.note+'</div>';
+    html+='<div style="margin-top:10px"><button class="gen-btn" onclick="switchTab(0)">查看此标准下的摘要对比 →</button></div>';
+  }
+  $('scrollArea').innerHTML=html;
+}
+function setSpec(v){
+  specV=v;liveSummary=null;
+  renderSpec();
+}
+
+/* ---------- Tab 2 自动评估 ---------- */
+function renderEval(){
+  const d=D[sel];
+  const cols=['base','v1','v2','v3'];
+  const colLb={base:'基线',v1:'v0.1',v2:'v0.2',v3:'v0.3'};
+  const hot = specV==='custom' ? 'v3' : specV;
+  let html='<div class="eval-table">';
+  html+='<div class="ev-row head"><div class="ev-dim">维度（1–5）</div>'+cols.map(c=>'<div class="ev-cell" style="font-size:10px;justify-content:center">'+colLb[c]+(c===hot?' ●':'')+'</div>').join('')+'</div>';
+  DIMS.forEach((dim,di)=>{
+    html+='<div class="ev-row"><div class="ev-dim">'+dim+'</div>'+cols.map(c=>{
+      const v=d.scores[c][di];
+      return '<div class="ev-cell'+(c===hot?' hot':'')+'"><div class="ev-bar"><div class="ev-fill" style="width:'+(v*20)+'%"></div></div><div class="ev-num">'+v+'</div></div>';
+    }).join('')+'</div>';
+  });
+  html+='</div>';
+  html+='<div class="judge"><div class="judge-title">评审意见（Claude 单条打分 · 预生成）</div>'+cols.map(c=>'<div class="judge-line'+(c===hot?' hot':'')+'"><span class="jv">'+colLb[c]+'</span><span>'+d.judges[c]+'</span></div>').join('')+'</div>';
+  html+='<div class="method">方法说明：上表为「单条打分」——由 Claude 依五维度逐条评审；「摘要对比」页的投票即「两两对比」。两者正对应模型评估中最常用的两类信号：前者适合回归监控，后者适合偏好数据生产。一个值得注意的细节：v0.1 的「语气与社区感」并不低——友好从来不是瓶颈，<b>准确与判断</b>才是。这正是标准要解决的问题。</div>';
+  $('scrollArea').innerHTML=html;
+}
+
+/* ================= Live 生成 ================= */
+async function liveGen(){
+  if(!sel)return;
+  const d=D[sel];
+  const specText = specV==='custom' && $('specEdit') ? $('specEdit').value : (SPECS[specV]||SPECS.v3).text;
+  const fullSpec = specV==='v1' ? specText : SPECS.v1.text.replace('{城市}',sel)+'\n'+specText;
+  const postsTxt=d.posts.map(p=>'['+p.d+'] '+p.a+'：'+p.c).join('\n');
+  toast('正在调用 Claude 实时生成…');
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,messages:[{role:'user',content:'你是小红书旅行内容的 AI 摘要助手。\n\n【输出标准】\n'+fullSpec.replace('{城市}',sel)+'\n\n【帖子】\n'+postsTxt+'\n\n请严格按照上述标准，输出关于'+sel+'的摘要。只输出摘要正文。'}]})});
+    const data=await r.json();
+    if(data&&data.content&&data.content[0]&&data.content[0].text){
+      liveSummary=data.content[0].text.trim();
+      $('modeBadge').textContent='Live 模式 · 实时生成';
+      $('modeBadge').classList.add('live');
+      switchTab(0);
+      toast('已用当前标准实时生成（评估页评分仍为预生成示意）');
+    }else{throw new Error('bad response')}
+  }catch(e){
+    toast('当前网络无法连接 Claude API——已展示预生成结果。实时生成与自定义标准请见录屏，或在可访问环境下体验。');
+  }
+}
+
+/* ================= Chat ================= */
+function renderChatSeed(){
+  const d=D[sel];
+  $('chatMsgs').innerHTML='<div class="cmsg u"><span class="ex">示例</span>你：'+esc(d.exq)+'</div><div class="cmsg"><span class="ex">示例</span>AI：'+esc(d.exa)+'</div>';
+  $('chatInput').value='';
+}
+async function sendChat(){
+  const inp=$('chatInput');
+  const msg=inp.value.trim();
+  if(!msg||!sel)return;
+  const btn=$('sendBtn');
+  btn.disabled=true;inp.value='';
+  hist.push({role:'user',content:msg});
+  const cm=$('chatMsgs');
+  const ud=document.createElement('div');ud.className='cmsg u';ud.textContent='你：'+msg;cm.appendChild(ud);
+  const ld=document.createElement('div');ld.className='cmsg';ld.textContent='AI 思考中…';cm.appendChild(ld);
+  cm.scrollTop=cm.scrollHeight;
+  const d=D[sel];
+  const ctx=d.posts.map(p=>'['+p.d+'] '+p.c).join('；');
+  const specText=(SPECS[specV]||SPECS.v3).text;
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:350,system:'你是小红书「旅迹」的 AI 助手，用户在查看关于'+sel+'的帖子。参考帖子（含发帖时间）：'+ctx+'。回答须遵守输出标准：'+specText+'。100字以内。',messages:hist})});
+    const data=await r.json();
+    const rep=data.content[0].text;
+    hist.push({role:'assistant',content:rep});
+    ld.textContent='AI：'+rep;
+  }catch(e){
+    hist.pop();
+    ld.textContent='AI：当前网络无法连接 Claude API。实时问答请见录屏演示，或在可访问环境下重试。';
+  }
+  btn.disabled=false;cm.scrollTop=cm.scrollHeight;
+}
+
+renderPins();
+</script>
+</body>
+</html>
